@@ -301,7 +301,7 @@ const App: React.FC = () => {
   const [stressTestImages, setStressTestImages] = useState<(File | null)[]>([null]);
   const [stressTestStyleId, setStressTestStyleId] = useState<string | null>(STYLES[0]?.id || null);
   const [isStressTestCustomPromptVisible, setStressTestCustomPromptVisible] = useState(false);
-  const [stressTestQuantity, setStressTestQuantity] = useState<number>(10);
+  const [stressTestQuantity, setStressTestQuantity] = useState<number | ''>(10);
   const [stressTestPrompt, setStressTestPrompt] = useState('');
   const [stressTestResults, setStressTestResults] = useState<StressTestResult[]>([]);
   const [isStressTesting, setIsStressTesting] = useState(false);
@@ -738,11 +738,14 @@ const App: React.FC = () => {
     }
   };
 
-  const handleStressTestQuantityChange = (value: number) => {
-    if (isNaN(value)) {
-        setStressTestQuantity(1);
-    } else {
-        setStressTestQuantity(clamp(value, 1, 60));
+  const handleStressTestQuantityChange = (value: string | number) => {
+    if (value === '') {
+        setStressTestQuantity('');
+        return;
+    }
+    const num = Number(value);
+    if (!isNaN(num)) {
+        setStressTestQuantity(clamp(num, 1, 60));
     }
   };
 
@@ -762,7 +765,7 @@ const App: React.FC = () => {
         return;
     }
 
-    const quantity = clamp(isNaN(stressTestQuantity) ? 1 : stressTestQuantity, 1, 60);
+    const quantity = clamp(Number(stressTestQuantity) || 1, 1, 60);
 
     setIsStressTesting(true);
     setError(null);
@@ -1512,9 +1515,9 @@ const App: React.FC = () => {
                     <label htmlFor="stress-quantity" className="block text-md font-semibold text-center mb-3">3. Số lượng biến thể (tối đa 60)</label>
                     <div className="flex items-center justify-center gap-2">
                         <button
-                            onClick={() => handleStressTestQuantityChange(stressTestQuantity - 1)}
+                            onClick={() => handleStressTestQuantityChange((Number(stressTestQuantity) || 1) - 1)}
                             className="p-3 bg-dark-olive/10 dark:bg-olive/20 rounded-full hover:bg-dark-olive/20 dark:hover:bg-olive/30 disabled:opacity-50"
-                            disabled={stressTestQuantity <= 1}
+                            disabled={Number(stressTestQuantity) <= 1}
                             aria-label="Giảm số lượng"
                         >
                             <MinusIcon className="w-5 h-5" />
@@ -1522,16 +1525,16 @@ const App: React.FC = () => {
                         <input
                             type="number"
                             id="stress-quantity"
-                            value={isNaN(stressTestQuantity) ? '' : stressTestQuantity}
-                            onChange={(e) => handleStressTestQuantityChange(parseInt(e.target.value, 10))}
+                            value={stressTestQuantity}
+                            onChange={(e) => handleStressTestQuantityChange(e.target.value)}
                             min="1"
                             max="60"
                             className="w-20 p-3 text-center bg-dark-olive/5 dark:bg-olive/20 border border-olive/30 rounded-lg focus:ring-2 focus:ring-olive focus:border-olive transition text-dark-olive dark:text-cream [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                          <button
-                            onClick={() => handleStressTestQuantityChange(stressTestQuantity + 1)}
+                            onClick={() => handleStressTestQuantityChange((Number(stressTestQuantity) || 0) + 1)}
                             className="p-3 bg-dark-olive/10 dark:bg-olive/20 rounded-full hover:bg-dark-olive/20 dark:hover:bg-olive/30 disabled:opacity-50"
-                            disabled={stressTestQuantity >= 60}
+                            disabled={Number(stressTestQuantity) >= 60}
                             aria-label="Tăng số lượng"
                         >
                             <PlusIcon className="w-5 h-5" />
