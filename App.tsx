@@ -70,8 +70,8 @@ const translateApiError = (error: unknown, isUserKey: boolean): string => {
     }
     
     // 7. Network error
-    if (message.includes("Failed to fetch")) {
-        return "Không thể kết nối đến máy chủ của Google. Vui lòng kiểm tra kết nối mạng của bạn và thử lại.";
+    if (message.includes("Failed to fetch") || message.includes("NETWORK_ERROR")) {
+        return "Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng của bạn và thử lại.\n\nNếu bạn đang dùng mạng công ty hoặc VPN, có thể tường lửa đang chặn yêu cầu. Hãy thử dùng một mạng khác.";
     }
 
     // 8. Fallback for other generic API errors
