@@ -38,20 +38,21 @@ const getApiKey = (userApiKey?: string | null): string => {
     // Chỉ sử dụng duy nhất key do người dùng cung cấp trong cài đặt.
     // Điều này đảm bảo hành vi nhất quán trên mọi môi trường.
     if (userApiKey && userApiKey.trim() !== '') {
-        return userApiKey;
+        return userApiKey.trim();
     }
     // Nếu không có key từ người dùng, ứng dụng sẽ báo lỗi và yêu cầu họ cung cấp.
     throw new Error("NO_API_KEY");
 }
 
 export const validateApiKey = async (apiKey: string): Promise<{ success: boolean; error?: string }> => {
-    if (!apiKey || apiKey.trim() === '') {
+    const trimmedApiKey = apiKey.trim();
+    if (!trimmedApiKey) {
         return { success: false, error: "API Key không được để trống." };
     }
     
-    // Sử dụng một endpoint nhẹ của Google API để xác thực key một cách trực tiếp.
-    // Điều này tránh được việc SDK có thể "thông minh" sử dụng key môi trường dự phòng.
-    const validationUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    // Sử dụng một endpoint cụ thể hơn để xác thực key bằng cách tìm nạp thông tin chi tiết của một model đã biết.
+    // Điều này có thể đáng tin cậy hơn là liệt kê tất cả các model.
+    const validationUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash?key=${trimmedApiKey}`;
 
     try {
         const response = await fetch(validationUrl);
@@ -97,13 +98,17 @@ export const generateTrendImage = async (images: File[], prompt: string, userApi
         throw new Error('SAFETY');
     }
 
-    const imagePart = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
-
-    if (imagePart && imagePart.inlineData) {
-      return `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
+    const firstCandidate = response.candidates?.[0];
+    if (firstCandidate?.content?.parts) {
+        // Iterate through parts to find the image data, as per Gemini guidelines.
+        for (const part of firstCandidate.content.parts) {
+            if (part.inlineData) {
+                return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+            }
+        }
     }
     
-    // Pass the model's text response in the error for better debugging
+    // If no image part is found, throw an error with the model's text response.
     const textResponse = response.text || 'Không nhận được phản hồi hợp lệ từ mô hình.';
     throw new Error(`MODEL_ERROR: ${textResponse}`);
   } catch (error) {
@@ -137,12 +142,17 @@ export const enhanceImage = async (imageDataUrl: string, quality: 'HD' | '2K' | 
         throw new Error('SAFETY');
     }
 
-    const newImagePart = response.candidates?.[0]?.content?.parts?.find(part => part.inlineData);
-
-    if (newImagePart && newImagePart.inlineData) {
-      return `data:${newImagePart.inlineData.mimeType};base64,${newImagePart.inlineData.data}`;
+    const firstCandidate = response.candidates?.[0];
+    if (firstCandidate?.content?.parts) {
+        // Iterate through parts to find the image data.
+        for (const part of firstCandidate.content.parts) {
+            if (part.inlineData) {
+                return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+            }
+        }
     }
 
+    // If no image part is found, throw an error with the model's text response.
     const textResponse = response.text || 'Không nhận được phản hồi hợp lệ từ mô hình.';
     throw new Error(`MODEL_ERROR: ${textResponse}`);
   } catch (error) {
@@ -165,10 +175,6 @@ export const generateImageFromText = async (prompt: string, userApiKey?: string 
         outputMimeType: 'image/png',
       },
     });
-
-    // FIX: Per the error, the 'finishReason' property does not exist on type 'GeneratedImage'.
-    // This check is removed. Safety violations are expected to be thrown as exceptions
-    // and handled by the catch block.
     
     const base64ImageBytes = response.generatedImages?.[0]?.image?.imageBytes;
 
