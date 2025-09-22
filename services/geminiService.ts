@@ -35,16 +35,12 @@ const dataUrlToGenerativePart = async (dataUrl: string) => {
 };
 
 const getApiKey = (userApiKey?: string | null): string => {
-    // Ưu tiên key do người dùng cung cấp trong cài đặt.
+    // Chỉ sử dụng duy nhất key do người dùng cung cấp trong cài đặt.
+    // Điều này đảm bảo hành vi nhất quán trên mọi môi trường.
     if (userApiKey && userApiKey.trim() !== '') {
         return userApiKey;
     }
-    // Nếu không, sử dụng key mặc định được cung cấp bởi môi trường AI Studio.
-    const studioKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
-    if (studioKey) {
-        return studioKey;
-    }
-    // Nếu cả hai đều không có, báo lỗi.
+    // Nếu không có key từ người dùng, ứng dụng sẽ báo lỗi và yêu cầu họ cung cấp.
     throw new Error("NO_API_KEY");
 }
 
