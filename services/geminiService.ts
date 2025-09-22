@@ -102,7 +102,7 @@ export const generateTrendImage = async (images: File[], prompt: string, userApi
         contents: {
             parts: [...imageParts, { text: prompt }],
         },
-        config: {
+        generationConfig: {
             responseModalities: [Modality.IMAGE, Modality.TEXT],
         },
     };
@@ -142,7 +142,7 @@ export const enhanceImage = async (imageDataUrl: string, quality: 'HD' | '2K' | 
         contents: {
             parts: [imagePart, { text: promptText }],
         },
-        config: {
+        generationConfig: {
             responseModalities: [Modality.IMAGE, Modality.TEXT],
         },
     };
@@ -171,10 +171,8 @@ export const generateImageFromText = async (prompt: string, userApiKey?: string 
     const payload = {
         model: 'imagen-4.0-generate-001',
         prompt: prompt,
-        config: {
-            numberOfImages: 1,
-            outputMimeType: 'image/png',
-        },
+        numberOfImages: 1,
+        outputMimeType: 'image/png',
     };
 
     const response = await callGeminiApi('generateImages', payload, userApiKey);
@@ -194,8 +192,8 @@ export const generatePromptVariations = async (basePrompt: string, count: number
     const payload = {
         model: "gemini-2.5-flash",
         contents: { parts: [{ text: userContent }] },
-        config: {
-            systemInstruction: systemInstruction,
+        systemInstruction: systemInstruction,
+        generationConfig: {
             responseMimeType: "application/json",
             responseSchema: {
                 type: Type.ARRAY,

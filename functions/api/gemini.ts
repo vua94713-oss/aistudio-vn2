@@ -85,13 +85,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     } else {
         // Handle all other endpoints (generateContent, generateImages, etc.) which are POST.
         const apiUrl = `${GOOGLE_API_BASE_URL}/models/${payload.model}:${endpoint}?key=${apiKey}`;
+        
+        // Create a new payload for Google, excluding our internal 'model' property.
+        const googlePayload = { ...payload };
+        delete googlePayload.model;
 
         const googleResponse = await fetch(apiUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(payload),
+            body: JSON.stringify(googlePayload),
         });
 
         if (!googleResponse.ok) {
