@@ -28,26 +28,36 @@ const translateApiError = (error: unknown, isUserKey: boolean): string => {
     }
 
     const message = error.message;
+    const messageLower = message.toLowerCase();
 
     // 2. Invalid API Key
     if (message.includes("API key not valid") || message.includes("PERMISSION_DENIED")) {
         return "API Key bạn cung cấp không hợp lệ hoặc đã hết hạn.\n\nCách khắc phục:\n1. Kiểm tra lại xem bạn đã sao chép đúng Key chưa.\n2. Truy cập Google AI Studio để tạo một Key mới.";
     }
 
-    // 3. Quota exhausted
-    if (message.includes("RESOURCE_EXHAUSTED") || message.includes("429")) {
+    // 3. Specific Quota Error (limit: 0) - Often a billing/project setup issue
+    if (messageLower.includes("exceeded your current quota") && messageLower.includes("limit: 0")) {
+        return "API Key của bạn có hạn ngạch bằng 0. Đây là một lỗi cài đặt phía Google, không phải lỗi của web.\n\nNguyên nhân thường gặp:\n1. Dự án Google Cloud của bạn chưa bật thanh toán (billing).\n2. API 'Generative Language' chưa được kích hoạt cho dự án.\n\nCách khắc phục:\n- Truy cập Google Cloud Console, tìm dự án liên kết với Key của bạn và kiểm tra lại hai mục trên.";
+    }
+
+    // 4. General Quota exhausted
+    const isQuotaError = message.includes("RESOURCE_EXHAUSTED") ||
+                         message.includes("429") ||
+                         messageLower.includes("exceeded your current quota");
+
+    if (isQuotaError) {
         if (isUserKey) {
             return "API Key của bạn đã hết hạn ngạch sử dụng.\n\nCách khắc phục:\n1. Vui lòng kiểm tra hạn ngạch trên trang quản lý Key của Google AI Studio.\n2. Thử lại sau một thời gian hoặc sử dụng một Key khác.";
         }
         return "Rất tiếc, lượt sử dụng miễn phí của trang web đã hết do lưu lượng truy cập cao.\n\nĐể tiếp tục, vui lòng sử dụng API Key miễn phí của riêng bạn bằng cách nhấn vào nút 'Cài đặt' (hình bánh răng) ở góc trên bên trái.";
     }
 
-    // 4. Safety block
+    // 5. Safety block
     if (message.includes("SAFETY")) {
         return "Yêu cầu của bạn đã bị chặn vì lý do an toàn. AI sẽ từ chối các nội dung nhạy cảm hoặc không phù hợp.\n\nCách khắc phục:\n- Vui lòng sử dụng một bức ảnh khác, thân thiện hơn.\n- Nếu dùng lệnh tùy chỉnh, hãy đảm bảo nội dung tích cực.";
     }
 
-    // 5. Model refusal / Error
+    // 6. Model refusal / Error
     if (message.includes("MODEL_ERROR:")) {
         const modelResponse = message.split('MODEL_ERROR: ')[1];
         const modelResponseLower = modelResponse.toLowerCase();
@@ -64,17 +74,17 @@ const translateApiError = (error: unknown, isUserKey: boolean): string => {
         return `Lỗi từ mô hình AI: ${modelResponse}`;
     }
 
-    // 6. No API Key provided
+    // 7. No API Key provided
     if (message.includes("NO_API_KEY")) {
          return "Không tìm thấy API Key mặc định. Vui lòng vào phần 'Cài đặt' để cung cấp API Key của riêng bạn và tiếp tục.";
     }
     
-    // 7. Network error
+    // 8. Network error
     if (message.includes("Failed to fetch") || message.includes("NETWORK_ERROR")) {
         return "Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng của bạn và thử lại.\n\nNếu bạn đang dùng mạng công ty hoặc VPN, có thể tường lửa đang chặn yêu cầu. Hãy thử dùng một mạng khác.";
     }
 
-    // 8. Fallback for other generic API errors
+    // 9. Fallback for other generic API errors
     try {
         const jsonStart = message.indexOf('{');
         if (jsonStart !== -1) {
@@ -88,7 +98,7 @@ const translateApiError = (error: unknown, isUserKey: boolean): string => {
       // Not a JSON error, fall through
     }
 
-    // 9. Default catch-all
+    // 10. Default catch-all
     console.error("Unhandled API Error:", message);
     return `Đã xảy ra lỗi không xác định: ${message}. Vui lòng thử lại sau.`;
 };
@@ -1062,8 +1072,8 @@ const App: React.FC = () => {
       </div>
       
       <main className="w-full max-w-2xl mx-auto">
-        <div className="w-full text-center p-2 mb-8 bg-green-400 dark:bg-green-600 text-green-900 dark:text-white rounded-lg text-sm font-semibold shadow">
-            Trạng thái: Đã cập nhật thành công!
+        <div className="w-full text-center p-2 mb-8 bg-blue-400 dark:bg-blue-600 text-blue-900 dark:text-white rounded-lg text-sm font-semibold shadow">
+            Trạng thái: v2
         </div>
         <header className="text-center mb-8">
           <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-olive to-dark-olive dark:from-light-olive dark:to-cream">
