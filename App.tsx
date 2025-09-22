@@ -301,7 +301,7 @@ const App: React.FC = () => {
   const [stressTestImages, setStressTestImages] = useState<(File | null)[]>([null]);
   const [stressTestStyleId, setStressTestStyleId] = useState<string | null>(STYLES[0]?.id || null);
   const [isStressTestCustomPromptVisible, setStressTestCustomPromptVisible] = useState(false);
-  const [stressTestQuantity, setStressTestQuantity] = useState<number | ''>(10);
+  const [stressTestQuantity, setStressTestQuantity] = useState<number | ''>(5);
   const [stressTestPrompt, setStressTestPrompt] = useState('');
   const [stressTestResults, setStressTestResults] = useState<StressTestResult[]>([]);
   const [isStressTesting, setIsStressTesting] = useState(false);
@@ -496,6 +496,8 @@ const App: React.FC = () => {
         let result = generatedImage;
         if (quality === '4K') {
             const result1 = await enhanceImage(result, '4K', userApiKey);
+            // Thêm khoảng nghỉ để tránh bị giới hạn tốc độ
+            await new Promise(resolve => setTimeout(resolve, 1100));
             result = await enhanceImage(result1, '4K', userApiKey);
         } else {
             result = await enhanceImage(result, quality, userApiKey);
@@ -639,7 +641,8 @@ const App: React.FC = () => {
     for (let i = 0; i < validTasksWithIds.length; i++) {
         const task = validTasksWithIds[i];
         try {
-            if (i > 0) await new Promise(resolve => setTimeout(resolve, 300));
+            // Thêm khoảng nghỉ đủ dài giữa các yêu cầu để tuân thủ giới hạn
+            if (i > 0) await new Promise(resolve => setTimeout(resolve, 1100));
 
             const imageUrl = await generateTrendImage(task.images, currentPrompt, userApiKey);
 
@@ -770,54 +773,50 @@ const App: React.FC = () => {
     setIsStressTesting(true);
     setError(null);
     setStressTestStage('generating_images');
-    setStressTestResults([]);
+    
+    const promptsToUse = Array.from({ length: quantity }, () => currentPrompt);
+    setStressTestResults(promptsToUse.map((p, i) => ({
+        id: i,
+        status: 'loading',
+        prompt: p
+    })));
+
+    // Giảm số lượng worker đồng thời xuống 1 để đảm bảo tuần tự và tuân thủ giới hạn
+    const CONCURRENCY_LIMIT = 1;
+    const taskQueue = [...promptsToUse]; // A queue of prompts to process
+
+    const worker = async () => {
+      while (taskQueue.length > 0) {
+        const prompt = taskQueue.shift(); // Get the next task (prompt)
+        if (!prompt) continue;
+        
+        const index = promptsToUse.length - taskQueue.length - 1;
+
+        try {
+            // Thêm độ trễ giữa các yêu cầu để tuân thủ giới hạn tốc độ (ví dụ: 60 yêu cầu/phút)
+            await new Promise(resolve => setTimeout(resolve, 1100));
+            
+            // Record the request for UI counter
+            requestTimestamps.current.push(Date.now());
+
+            const imageUrl = await generateTrendImage(imagesToProcess, prompt, userApiKey);
+            setStressTestResults(prev => prev.map(r => r.id === index ? { ...r, status: 'success', imageUrl } : r));
+        } catch (err) {
+            const errorMessage = translateApiError(err, !!userApiKey);
+            if (errorMessage.toLowerCase().includes("hết hạn ngạch") || errorMessage.includes("429")) {
+                setRateLimitCooldown(60);
+            }
+            setStressTestResults(prev => prev.map(r => r.id === index ? { ...r, status: 'error', error: errorMessage.split('\n\n')[0] } : r));
+        }
+      }
+    };
 
     try {
-        // STEP 1: Generate prompt variations (REMOVED)
-        // Just use the same prompt for all generations.
-        const promptsToUse = Array.from({ length: quantity }, () => currentPrompt);
-
-        setStressTestResults(promptsToUse.map((p, i) => ({
-            id: i,
-            status: 'loading',
-            prompt: p
-        })));
-
-        // STEP 2: Generate images concurrently
-        const imageGenerationPromises = promptsToUse.map((prompt, index) => {
-             // Check rate limit before dispatching
-            const now = Date.now();
-            const oneMinuteAgo = now - 60000;
-            const recentTimestamps = requestTimestamps.current.filter(t => t > oneMinuteAgo);
-            
-            if (recentTimestamps.length >= 60) {
-                const oldestRequest = recentTimestamps.sort((a,b) => a-b)[0];
-                const cooldownTime = Math.ceil((60000 - (now - oldestRequest)) / 1000);
-                setRateLimitCooldown(cooldownTime > 0 ? cooldownTime : 60);
-                // Return a rejected promise for tasks that are rate-limited
-                return Promise.reject(new Error('Đã đạt giới hạn'));
-            }
-            requestTimestamps.current.push(now);
-
-            return new Promise(resolve => setTimeout(resolve, index * 50)) // Stagger requests
-                .then(() => generateTrendImage(imagesToProcess, prompt, userApiKey))
-                .then(imageUrl => {
-                    setStressTestResults(prev => prev.map(r => r.id === index ? { ...r, status: 'success', imageUrl } : r));
-                })
-                .catch(err => {
-                    const errorMessage = translateApiError(err, !!userApiKey);
-                    if (errorMessage.toLowerCase().includes("hết hạn ngạch") || errorMessage.includes("429")) {
-                        setRateLimitCooldown(60);
-                    }
-                    setStressTestResults(prev => prev.map(r => r.id === index ? { ...r, status: 'error', error: errorMessage.split('\n\n')[0] } : r));
-                });
-        });
-
-        await Promise.allSettled(imageGenerationPromises);
-
+        const workers = Array(CONCURRENCY_LIMIT).fill(0).map(worker);
+        await Promise.all(workers);
     } catch (err) {
-        const translatedError = translateApiError(err, !!userApiKey);
-        setError(`Đã xảy ra lỗi: ${translatedError}`);
+       const translatedError = translateApiError(err, !!userApiKey);
+       setError(`Đã xảy ra lỗi trong quá trình xử lý hàng loạt: ${translatedError}`);
     } finally {
         setIsStressTesting(false);
         setStressTestStage('idle');
