@@ -1062,8 +1062,8 @@ const App: React.FC = () => {
       </div>
       
       <main className="w-full max-w-2xl mx-auto">
-        <div className="w-full text-center p-2 mb-8 bg-yellow-300 dark:bg-yellow-500 text-yellow-900 dark:text-black rounded-lg text-sm font-semibold shadow">
-            trạng thái: v1
+        <div className="w-full text-center p-2 mb-8 bg-green-400 dark:bg-green-600 text-green-900 dark:text-white rounded-lg text-sm font-semibold shadow">
+            Trạng thái: Đã cập nhật thành công!
         </div>
         <header className="text-center mb-8">
           <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-olive to-dark-olive dark:from-light-olive dark:to-cream">
