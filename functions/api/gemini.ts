@@ -20,6 +20,30 @@ interface GeminiProxyRequest {
 const GOOGLE_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
 
 /**
+ * A robust error handler that reads the response body as text first
+ * to avoid JSON parsing errors on empty or non-JSON bodies.
+ */
+async function handleGoogleError(response: Response): Promise<Response> {
+    const errorText = await response.text();
+    let errorMessage = 'Lỗi không xác định từ Google API.';
+    try {
+        // Try to parse the text as JSON
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData?.error?.message || errorMessage;
+    } catch (e) {
+        // If parsing fails, use the raw text if it's not empty
+        if (errorText) {
+            errorMessage = errorText;
+        }
+    }
+    return new Response(
+        JSON.stringify({ error: errorMessage }),
+        { status: response.status, headers: { 'Content-Type': 'application/json' } }
+    );
+}
+
+
+/**
  * Handles POST requests to /api/gemini.
  * This function acts as a secure proxy to the Google Gemini API.
  */
@@ -30,53 +54,56 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     const { endpoint, payload, userApiKey } = body;
 
     // 2. Determine which API key to use
-    // - Prioritize the user-provided key.
-    // - Fall back to the default key stored securely in Cloudflare's environment variables.
     const apiKey = userApiKey?.trim() || env.API_KEY;
 
     if (!apiKey) {
-      // If no key is available at all, return a clear error.
       return new Response(
         JSON.stringify({ error: "NO_API_KEY: API Key không được cấu hình trên máy chủ." }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // 3. Construct the full URL for the Google API endpoint
-    let apiUrl = `${GOOGLE_API_BASE_URL}/models/${payload.model}:${endpoint}`;
-    
-    // Special case for the validation endpoint which has a different URL structure
+    // 3. Handle different endpoints
     if (endpoint === 'validate') {
-      apiUrl = `${GOOGLE_API_BASE_URL}/models/gemini-2.5-flash`;
-    }
+        // The validation endpoint is a GET request to a specific model URL.
+        const validationUrl = `${GOOGLE_API_BASE_URL}/models/gemini-2.5-flash?key=${apiKey}`;
+        
+        const googleResponse = await fetch(validationUrl, {
+            method: 'GET',
+        });
 
-    // 4. Make the actual request to the Google API
-    const googleResponse = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey, // Use the API key in the header
-      },
-      // Pass the payload from the frontend directly to Google
-      body: endpoint !== 'validate' ? JSON.stringify(payload) : undefined,
-    });
+        if (!googleResponse.ok) {
+            return handleGoogleError(googleResponse);
+        }
 
-    // 5. Handle the response from Google
-    if (!googleResponse.ok) {
-      // If Google returns an error, forward the error details to the frontend
-      const errorData = await googleResponse.json();
-      return new Response(
-        JSON.stringify({ error: errorData?.error?.message || 'Lỗi không xác định từ Google API.' }),
-        { status: googleResponse.status, headers: { 'Content-Type': 'application/json' } }
-      );
+        const data = await googleResponse.json();
+        return new Response(JSON.stringify(data), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+        });
+
+    } else {
+        // Handle all other endpoints (generateContent, generateImages, etc.) which are POST.
+        const apiUrl = `${GOOGLE_API_BASE_URL}/models/${payload.model}:${endpoint}?key=${apiKey}`;
+
+        const googleResponse = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!googleResponse.ok) {
+            return handleGoogleError(googleResponse);
+        }
+        
+        const data = await googleResponse.json();
+        return new Response(JSON.stringify(data), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+        });
     }
-    
-    // 6. If successful, forward the successful response from Google back to the frontend
-    const data = await googleResponse.json();
-    return new Response(JSON.stringify(data), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    });
 
   } catch (error) {
     // Catch any unexpected errors during the process
