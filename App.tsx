@@ -21,7 +21,7 @@ const dataUrlToFile = async (dataUrl: string, fileName: string): Promise<File> =
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
-const translateApiError = (error: unknown, isUserKey: boolean): string => {
+const translateApiError = (error: unknown): string => {
     // 1. Handle non-Error objects
     if (!(error instanceof Error)) {
         return "Đã xảy ra một lỗi không xác định. Vui lòng thử lại.";
@@ -46,10 +46,7 @@ const translateApiError = (error: unknown, isUserKey: boolean): string => {
                          messageLower.includes("exceeded your current quota");
 
     if (isQuotaError) {
-        if (isUserKey) {
-            return "API Key của bạn đã hết hạn ngạch sử dụng.\n\nCách khắc phục:\n1. Vui lòng kiểm tra hạn ngạch trên trang quản lý Key của Google AI Studio.\n2. Thử lại sau một thời gian hoặc sử dụng một Key khác.";
-        }
-        return "Rất tiếc, lượt sử dụng miễn phí của trang web đã hết do lưu lượng truy cập cao.\n\nĐể tiếp tục, vui lòng sử dụng API Key miễn phí của riêng bạn bằng cách nhấn vào nút 'Cài đặt' (hình bánh răng) ở góc trên bên trái.";
+        return "API Key của bạn đã hết hạn ngạch sử dụng.\n\nCách khắc phục:\n1. Vui lòng kiểm tra hạn ngạch trên trang quản lý Key của Google AI Studio.\n2. Thử lại sau một thời gian hoặc sử dụng một Key khác.";
     }
 
     // 5. Safety block
@@ -76,12 +73,12 @@ const translateApiError = (error: unknown, isUserKey: boolean): string => {
 
     // 7. No API Key provided
     if (message.includes("NO_API_KEY")) {
-         return "Không tìm thấy API Key mặc định. Vui lòng vào phần 'Cài đặt' để cung cấp API Key của riêng bạn và tiếp tục.";
+         return "Bạn chưa cung cấp API Key. Vui lòng vào phần 'Cài đặt' (hình bánh răng) để cung cấp API Key của riêng bạn và tiếp tục.";
     }
     
-    // 8. Network error
-    if (message.includes("Failed to fetch") || message.includes("NETWORK_ERROR")) {
-        return "Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng của bạn và thử lại.\n\nNếu bạn đang dùng mạng công ty hoặc VPN, có thể tường lửa đang chặn yêu cầu. Hãy thử dùng một mạng khác.";
+    // 8. Network error (from client-side fetch)
+    if (message.includes("Failed to fetch") || messageLower.includes('networkerror')) {
+        return "Không thể kết nối đến máy chủ của Google. Vui lòng kiểm tra kết nối mạng của bạn và thử lại.\n\nNếu bạn đang dùng mạng công ty hoặc VPN, có thể tường lửa đang chặn yêu cầu. Hãy thử dùng một mạng khác.";
     }
 
     // 9. Fallback for other generic API errors
@@ -169,7 +166,7 @@ const ApiKeyModal: React.FC<{
     if (result.success) {
         setCheckStatus({ message: 'Key hợp lệ và sẵn sàng sử dụng!', type: 'success' });
     } else {
-        const translatedError = translateApiError(new Error(result.error || 'API Key không hợp lệ.'), true);
+        const translatedError = translateApiError(new Error(result.error || 'API Key không hợp lệ.'));
         setCheckStatus({ message: translatedError.split('\n\n')[0], type: 'error' }); // Show only the first line of the error
     }
     
@@ -207,7 +204,7 @@ const ApiKeyModal: React.FC<{
             </button>
             
             <p className="mb-4 text-sm text-center text-dark-olive/80 dark:text-cream/80">
-                Key chung của web có thể hết lượt. Để tạo ảnh không giới hạn, hãy dùng API Key miễn phí của riêng bạn.
+                Để sử dụng ứng dụng, bạn cần có API Key miễn phí từ Google.
             </p>
             
             <ol className="list-decimal list-inside text-sm space-y-2 text-dark-olive/80 dark:text-cream/80 mb-4">
@@ -216,6 +213,9 @@ const ApiKeyModal: React.FC<{
                 </li>
                 <li>
                     Sao chép Key vừa tạo và dán vào ô bên dưới.
+                </li>
+                 <li>
+                    Quan trọng: Để tạo ảnh, dự án Google Cloud của bạn cần <a href="https://cloud.google.com/billing/docs/how-to/modify-project" target="_blank" rel="noopener noreferrer" className="text-olive dark:text-light-olive hover:underline font-semibold">bật thanh toán (enable billing)</a>. Google cung cấp bậc miễn phí lớn nên bạn sẽ không bị tính phí ngay.
                 </li>
             </ol>
 
@@ -321,6 +321,9 @@ const App: React.FC = () => {
     const savedApiKey = localStorage.getItem('userApiKey');
     if (savedApiKey) {
       setUserApiKey(savedApiKey);
+    } else {
+      // If no key is saved, open the modal for the user after a short delay.
+      setTimeout(() => setIsApiKeyModalOpen(true), 500);
     }
 
     const timer = setInterval(() => {
@@ -377,7 +380,7 @@ const App: React.FC = () => {
   };
 
   const handleApiError = (err: unknown) => {
-    const translatedError = translateApiError(err, !!userApiKey);
+    const translatedError = translateApiError(err);
     setError(translatedError);
   };
   
@@ -408,6 +411,11 @@ const App: React.FC = () => {
   };
 
   const handleGenerate = async () => {
+    if (!userApiKey) {
+        handleApiError(new Error("NO_API_KEY"));
+        setIsApiKeyModalOpen(true);
+        return;
+    }
     const imagesToProcess = images.filter((img): img is File => img !== null);
     if (imagesToProcess.length === 0) {
       setError("Vui lòng tải lên ít nhất một ảnh.");
@@ -615,6 +623,12 @@ const App: React.FC = () => {
   }
 
   const handleBatchGenerate = async () => {
+    if (!userApiKey) {
+        handleApiError(new Error("NO_API_KEY"));
+        setIsApiKeyModalOpen(true);
+        return;
+    }
+
     const currentPrompt = STYLES.find(s => s.id === batchStyleId)?.prompt;
     if (!currentPrompt) {
         setError("Vui lòng chọn một style hợp lệ.");
@@ -660,16 +674,8 @@ const App: React.FC = () => {
                 r.taskId === task.taskId ? { ...r, status: 'success', imageUrl } : r
             ));
         } catch (err) {
-            const errorMessage = translateApiError(err, !!userApiKey);
-            const isQuotaError = (err instanceof Error && (err.message.includes("RESOURCE_EXHAUSTED") || err.message.includes("429")));
+            const errorMessage = translateApiError(err);
             
-            if (isQuotaError && !userApiKey) {
-                setError(errorMessage);
-                setIsBatchLoading(false);
-                setBatchResults([]); // Clear results on quota error
-                return; // Stop the whole batch process
-            }
-
             setBatchResults(prev => prev.map(r => 
                 r.taskId === task.taskId ? { ...r, status: 'error', error: errorMessage } : r
             ));
@@ -763,6 +769,12 @@ const App: React.FC = () => {
   };
 
   const handleStressTestGenerate = async () => {
+    if (!userApiKey) {
+        handleApiError(new Error("NO_API_KEY"));
+        setIsApiKeyModalOpen(true);
+        return;
+    }
+
     const imagesToProcess = stressTestImages.filter((img): img is File => img !== null);
     if (imagesToProcess.length === 0) {
         setError("Vui lòng tải lên ít nhất một ảnh để bắt đầu.");
@@ -812,7 +824,7 @@ const App: React.FC = () => {
             const imageUrl = await generateTrendImage(imagesToProcess, prompt, userApiKey);
             setStressTestResults(prev => prev.map(r => r.id === index ? { ...r, status: 'success', imageUrl } : r));
         } catch (err) {
-            const errorMessage = translateApiError(err, !!userApiKey);
+            const errorMessage = translateApiError(err);
             if (errorMessage.toLowerCase().includes("hết hạn ngạch") || errorMessage.includes("429")) {
                 setRateLimitCooldown(60);
             }
@@ -825,7 +837,7 @@ const App: React.FC = () => {
         const workers = Array(CONCURRENCY_LIMIT).fill(0).map(worker);
         await Promise.all(workers);
     } catch (err) {
-       const translatedError = translateApiError(err, !!userApiKey);
+       const translatedError = translateApiError(err);
        setError(`Đã xảy ra lỗi trong quá trình xử lý hàng loạt: ${translatedError}`);
     } finally {
         setIsStressTesting(false);
@@ -990,7 +1002,7 @@ const App: React.FC = () => {
       setIsVerifyingApiKey(false);
     } else {
       setIsVerifyingApiKey(false);
-      setApiKeyError(translateApiError(new Error(result.error || 'API Key không hợp lệ.'), true));
+      setApiKeyError(translateApiError(new Error(result.error || 'API Key không hợp lệ.')));
     }
   };
 
@@ -1052,7 +1064,7 @@ const App: React.FC = () => {
       if (userApiKey) {
         return <p className="text-green-700 dark:text-green-400 mt-2 text-xs font-semibold">Đang sử dụng Key cá nhân của bạn</p>
       }
-      return <p className="text-dark-olive/60 dark:text-cream/60 mt-2 text-xs font-semibold">Sử dụng Key mặc định của trang web</p>
+      return <p className="text-yellow-600 dark:text-yellow-400 mt-2 text-xs font-semibold">Vui lòng cung cấp API Key để sử dụng</p>
   }
 
   return (
@@ -1073,7 +1085,7 @@ const App: React.FC = () => {
       
       <main className="w-full max-w-2xl mx-auto">
         <div className="w-full text-center p-2 mb-8 bg-blue-400 dark:bg-blue-600 text-blue-900 dark:text-white rounded-lg text-sm font-semibold shadow">
-            Trạng thái: v2
+            Trạng thái: v2.1 (Client-side API)
         </div>
         <header className="text-center mb-8">
           <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-olive to-dark-olive dark:from-light-olive dark:to-cream">
